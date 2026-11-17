@@ -1,4 +1,7 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  DateTimePickerChangeEvent,
+} from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
@@ -52,9 +55,29 @@ export function TaskModal({ visible, task, colors, onClose, onSave }: Props) {
     onClose();
   };
 
-  const pickerChange = (_event: DateTimePickerEvent, value?: Date) => {
-    if (Platform.OS === 'android') setShowPicker(false);
-    if (value) setDueDate(value);
+  const openAndroidPicker = () => {
+    const initialDate = dueDate ?? new Date(pickerMinimum.getTime() + 60 * 60 * 1000);
+    DateTimePickerAndroid.open({
+      value: initialDate,
+      mode: 'date',
+      minimumDate: pickerMinimum,
+      onValueChange: (_event, selectedDate) => {
+        const date = new Date(selectedDate);
+        DateTimePickerAndroid.open({
+          value: dueDate ?? date,
+          mode: 'time',
+          onValueChange: (_timeEvent, selectedTime) => {
+            const result = new Date(date);
+            result.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+            setDueDate(result);
+          },
+        });
+      },
+    });
+  };
+
+  const pickerValueChange = (_event: DateTimePickerChangeEvent, value: Date) => {
+    setDueDate(value);
   };
 
   return (
@@ -90,12 +113,20 @@ export function TaskModal({ visible, task, colors, onClose, onSave }: Props) {
               ))}
             </View>
             <Text style={[styles.label, { color: colors.muted }]}>Due date</Text>
-            <Pressable onPress={() => setShowPicker(true)} style={[styles.dateButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <Pressable onPress={() => Platform.OS === 'android' ? openAndroidPicker() : setShowPicker(true)} style={[styles.dateButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
               <Ionicons name="calendar-outline" size={18} color={colors.accent} />
               <Text style={{ color: colors.text, fontWeight: '600' }}>{dueDate ? dueDate.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Choose date and time'}</Text>
               {dueDate && <Pressable onPress={() => setDueDate(undefined)}><Ionicons name="close-circle" size={18} color={colors.muted} /></Pressable>}
             </Pressable>
-            {showPicker && <DateTimePicker value={dueDate ?? new Date(pickerMinimum.getTime() + 60 * 60 * 1000)} mode="datetime" minimumDate={pickerMinimum} onChange={pickerChange} />}
+            {Platform.OS === 'ios' && showPicker && (
+              <DateTimePicker
+                value={dueDate ?? new Date(pickerMinimum.getTime() + 60 * 60 * 1000)}
+                mode="datetime"
+                minimumDate={pickerMinimum}
+                onValueChange={pickerValueChange}
+                onDismiss={() => setShowPicker(false)}
+              />
+            )}
             <Text style={[styles.label, { color: colors.muted }]}>Subtasks</Text>
             <View style={styles.subtaskInput}>
               <TextInput value={subtaskText} onChangeText={setSubtaskText} placeholder="Add a checklist item" placeholderTextColor={colors.muted} style={{ flex: 1, color: colors.text }} onSubmitEditing={() => { if (subtaskText.trim()) { setSubtasks([...subtasks, { id: `${Date.now()}`, title: subtaskText.trim(), completed: false }]); setSubtaskText(''); } }} />
