@@ -1,1 +1,1 @@
-C:/Users/yaako/OneDrive/Documents/react mobile apps/myFirstMobileApp/APP_FEATURES.md
+APP_FEATURES.md
