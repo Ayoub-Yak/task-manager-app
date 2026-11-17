@@ -4,7 +4,7 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -17,7 +17,7 @@ import {
   View,
 } from 'react-native';
 
-import { Task, TaskCategory, TaskDraft, TaskPriority } from '@/types/task';
+import { Task, TaskCategory, TaskDraft, TaskPriority, TaskRecurrence } from '@/types/task';
 
 type Props = {
   visible: boolean;
@@ -29,6 +29,12 @@ type Props = {
 
 const priorities: TaskPriority[] = ['low', 'medium', 'high'];
 const categories: TaskCategory[] = ['Work', 'Personal', 'Urgent'];
+const recurrences: { value: TaskRecurrence; label: string }[] = [
+  { value: 'none', label: 'Never' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+];
 
 export function TaskModal({ visible, task, colors, onClose, onSave }: Props) {
   const [title, setTitle] = useState(task?.title ?? '');
@@ -39,20 +45,31 @@ export function TaskModal({ visible, task, colors, onClose, onSave }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [subtaskText, setSubtaskText] = useState('');
   const [subtasks, setSubtasks] = useState<Task['subtasks']>(task?.subtasks ?? []);
+  const [recurrence, setRecurrence] = useState<TaskRecurrence>(task?.recurrence ?? 'none');
   const [pickerMinimum] = useState(() => new Date());
+  const [isSaving, setIsSaving] = useState(false);
+  const saveLock = useRef(false);
 
   const save = async () => {
-    if (!title.trim()) return;
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await onSave({
-      title: title.trim(),
-      description: description.trim(),
-      priority,
-      category,
-      dueDate: dueDate?.toISOString(),
-      subtasks,
-    });
-    onClose();
+    if (!title.trim() || saveLock.current) return;
+    saveLock.current = true;
+    setIsSaving(true);
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await onSave({
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+        category,
+        dueDate: dueDate?.toISOString(),
+        subtasks,
+        recurrence,
+      });
+      onClose();
+    } finally {
+      saveLock.current = false;
+      setIsSaving(false);
+    }
   };
 
   const openAndroidPicker = () => {
@@ -127,6 +144,19 @@ export function TaskModal({ visible, task, colors, onClose, onSave }: Props) {
                 onDismiss={() => setShowPicker(false)}
               />
             )}
+            <Text style={[styles.label, { color: colors.muted }]}>Repeat</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.repeatRow}>
+              {recurrences.map((item) => (
+                <Pressable
+                  key={item.value}
+                  onPress={() => setRecurrence(item.value)}
+                  style={[styles.chip, { backgroundColor: recurrence === item.value ? colors.accent : colors.card }]}>
+                  <Text style={{ color: recurrence === item.value ? '#fff' : colors.muted, fontWeight: '700' }}>
+                    {item.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
             <Text style={[styles.label, { color: colors.muted }]}>Subtasks</Text>
             <View style={styles.subtaskInput}>
               <TextInput value={subtaskText} onChangeText={setSubtaskText} placeholder="Add a checklist item" placeholderTextColor={colors.muted} style={{ flex: 1, color: colors.text }} onSubmitEditing={() => { if (subtaskText.trim()) { setSubtasks([...subtasks, { id: `${Date.now()}`, title: subtaskText.trim(), completed: false }]); setSubtaskText(''); } }} />
@@ -135,8 +165,8 @@ export function TaskModal({ visible, task, colors, onClose, onSave }: Props) {
               </Pressable>
             </View>
             {subtasks.map((item) => <View key={item.id} style={styles.subtask}><Ionicons name="checkmark-circle-outline" size={17} color={colors.accent} /><Text style={{ color: colors.text, flex: 1 }}>{item.title}</Text><Pressable onPress={() => setSubtasks(subtasks.filter((subtask) => subtask.id !== item.id))}><Ionicons name="trash-outline" size={16} color={colors.muted} /></Pressable></View>)}
-            <Pressable disabled={!title.trim()} onPress={save} style={[styles.saveButton, { backgroundColor: title.trim() ? colors.accent : colors.border }]}>
-              <Text style={styles.saveText}>{task ? 'Save changes' : 'Add task'}</Text>
+            <Pressable disabled={!title.trim() || isSaving} onPress={save} style={[styles.saveButton, { backgroundColor: title.trim() && !isSaving ? colors.accent : colors.border }]}>
+              <Text style={styles.saveText}>{isSaving ? 'Saving...' : task ? 'Save changes' : 'Add task'}</Text>
               <Ionicons name="arrow-forward" size={18} color="#fff" />
             </Pressable>
           </ScrollView>
@@ -159,6 +189,7 @@ const styles = StyleSheet.create({
   textArea: { minHeight: 88, textAlignVertical: 'top' },
   label: { fontSize: 12, fontWeight: '800', marginTop: 4 },
   chipRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  repeatRow: { gap: 8, paddingRight: 8 },
   chip: { borderRadius: 12, paddingHorizontal: 13, paddingVertical: 9 },
   dateButton: { minHeight: 50, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
   subtaskInput: { borderWidth: 1, borderColor: '#D5D6DE', borderRadius: 14, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', minHeight: 50 },

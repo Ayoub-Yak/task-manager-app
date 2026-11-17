@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 
 import { Task } from '@/types/task';
 
@@ -20,6 +21,21 @@ const priorityColors = {
 };
 
 export function TaskRow({ task, colors, onPress, onToggle, onDelete }: Props) {
+  const [checkScale] = useState(() => new Animated.Value(1));
+
+  const animateCompletion = () => {
+    checkScale.setValue(1);
+    Animated.sequence([
+      Animated.spring(checkScale, { toValue: 1.24, useNativeDriver: true, speed: 28, bounciness: 12 }),
+      Animated.spring(checkScale, { toValue: 1, useNativeDriver: true, speed: 24, bounciness: 8 }),
+    ]).start();
+  };
+
+  const handleToggle = () => {
+    if (!task.completed) animateCompletion();
+    onToggle();
+  };
+
   const rightAction = () => (
     <Pressable
       accessibilityLabel={`Delete ${task.title}`}
@@ -32,7 +48,7 @@ export function TaskRow({ task, colors, onPress, onToggle, onDelete }: Props) {
   const leftAction = () => (
     <Pressable
       accessibilityLabel={task.completed ? `Mark ${task.title} active` : `Complete ${task.title}`}
-      onPress={onToggle}
+      onPress={handleToggle}
       style={[styles.action, { backgroundColor: '#4C9A6A' }]}>
       <Ionicons name={task.completed ? 'refresh-outline' : 'checkmark-outline'} size={24} color="#fff" />
     </Pressable>
@@ -45,15 +61,17 @@ export function TaskRow({ task, colors, onPress, onToggle, onDelete }: Props) {
   return (
     <Swipeable renderLeftActions={leftAction} renderRightActions={rightAction} overshootLeft={false} overshootRight={false}>
       <Pressable onPress={onPress} style={({ pressed }) => [styles.card, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+        <Animated.View style={{ transform: [{ scale: checkScale }] }}>
         <Pressable
           hitSlop={10}
           onPress={async () => {
             await Haptics.selectionAsync();
-            onToggle();
+            handleToggle();
           }}
           style={[styles.checkbox, { borderColor: task.completed ? colors.accent : colors.muted }]}>
           {task.completed && <Ionicons name="checkmark" size={15} color="#fff" />}
         </Pressable>
+        </Animated.View>
         <View style={styles.content}>
           <Text numberOfLines={1} style={[styles.title, { color: task.completed ? colors.muted : colors.text }, task.completed && styles.completed]}>
             {task.title}
@@ -69,10 +87,19 @@ export function TaskRow({ task, colors, onPress, onToggle, onDelete }: Props) {
               <Text style={[styles.badgeText, { color: priorityColors[task.priority] }]}>{task.priority}</Text>
             </View>
             <Text style={[styles.metaText, { color: colors.muted }]}>{task.category}</Text>
-            <Text style={[styles.metaText, { color: colors.muted }]}>{dueLabel}</Text>
+            <Text style={[styles.metaText, { color: colors.muted }]}>
+              {task.recurrence !== 'none' && <Ionicons name="repeat" size={12} color={colors.accent} />} {dueLabel}
+            </Text>
           </View>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+        <View style={styles.trailing}>
+          {task.streak > 0 && (
+            <View style={[styles.streakBadge, { backgroundColor: `${colors.accent}18` }]}>
+              <Text style={[styles.streakText, { color: colors.accent }]}>🔥 {task.streak}</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+        </View>
       </Pressable>
     </Swipeable>
   );
@@ -92,4 +119,7 @@ const styles = StyleSheet.create({
   dot: { width: 5, height: 5, borderRadius: 3 },
   badgeText: { fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
   metaText: { fontSize: 11 },
+  trailing: { alignItems: 'flex-end', gap: 8 },
+  streakBadge: { borderRadius: 9, paddingHorizontal: 7, paddingVertical: 4 },
+  streakText: { fontSize: 11, fontWeight: '800' },
 });
